@@ -1,0 +1,20 @@
+# Build output
+bin/
+obj/
+publish/
+publish-*/
+
+# Rider / VS
+.vs/
+*.user
+
+# Logs
+*.log
+
+# Release artifacts
+*.zip
+
+# Local working notes (not part of the published repo)
+findings.md
+progress.md
+task_plan.md
