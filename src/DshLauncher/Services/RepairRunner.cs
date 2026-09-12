@@ -49,6 +49,7 @@ namespace DshLauncher.Services
         private readonly Func<DshLocation?> _resolveDsh;
         private readonly Func<int, PortExclusionStatus> _checkPort;
         private readonly Func<int, bool> _fixPort;
+        private readonly Func<IReadOnlyList<PluginCompatIssue>> _checkCompat;
 
         public RepairRunner(
             AppSettings settings,
@@ -59,7 +60,8 @@ namespace DshLauncher.Services
             Action<string>? log = null,
             Func<DshLocation?>? resolveDsh = null,
             Func<int, PortExclusionStatus>? checkPort = null,
-            Func<int, bool>? fixPort = null)
+            Func<int, bool>? fixPort = null,
+            Func<IReadOnlyList<PluginCompatIssue>>? checkCompat = null)
         {
             _settings = settings;
             _store = store;
@@ -70,6 +72,11 @@ namespace DshLauncher.Services
             _resolveDsh = resolveDsh ?? (() => new DshResolver().Resolve());
             _checkPort = checkPort ?? (port => PortExclusionService.Check(port));
             _fixPort = fixPort ?? (port => PortExclusionFixer.Run(port));
+            _checkCompat = checkCompat ?? (() =>
+            {
+                var cliDir = Path.GetDirectoryName(Path.GetDirectoryName(_settings.DshBinPath)) ?? "";
+                return PluginCompatChecker.Check(AppPaths.ProfileDir, cliDir);
+            });
         }
 
         public RepairReport Run()
@@ -140,7 +147,49 @@ namespace DshLauncher.Services
                 LogOutput(output);
             }
 
-            // 4. repair the koffi native module
+            // 5. plugin / harness version compatibility
+            _log?.Invoke("── 检查插件兼容性…");
+            var compatIssues = _checkCompat();
+            if (compatIssues.Count == 0)
+            {
+                steps.Add(new RepairStepResult("检查插件兼容性", true, "所有插件与 harness 版本兼容"));
+            }
+            else
+            {
+                foreach (var issue in compatIssues)
+                {
+                    _log?.Invoke("⚠ " + issue);
+                }
+
+                var affected = compatIssues.Select(i => i.PluginName).Distinct().ToList();
+                var updatesOk = loc != null;
+                if (loc != null)
+                {
+                    foreach (var name in affected)
+                    {
+                        _log?.Invoke($"── 更新插件 {name} …");
+                        var (code, output) = _runCommand(loc.BinPath, new[] { "plugin", "--profile", AppPaths.ProfileName, "update", name });
+                        LogOutput(output);
+                        if (code != 0)
+                        {
+                            updatesOk = false;
+                        }
+                    }
+                }
+
+                var remaining = _checkCompat();
+                if (remaining.Count == 0)
+                {
+                    steps.Add(new RepairStepResult("检查插件兼容性", true, $"已更新 {affected.Count} 个插件，兼容性问题全部解决"));
+                }
+                else
+                {
+                    var detail = string.Join("；", remaining.Select(i => i.ToString()));
+                    steps.Add(new RepairStepResult("检查插件兼容性", false, $"仍有 {remaining.Count} 处不兼容：{detail}"));
+                }
+            }
+
+            // 6. repair the koffi native module
             _log?.Invoke("── 修复 koffi 原生模块 (dsh-win32 fix)…");
             if (!File.Exists(_dshWin32CliPath))
             {

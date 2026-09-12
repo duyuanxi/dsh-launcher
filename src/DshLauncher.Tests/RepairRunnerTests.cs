@@ -54,9 +54,11 @@ namespace DshLauncher.Tests
         private static RepairRunner MakeRunner(
             AppSettings settings, SettingsStore store, PluginManager pm, string cliPath,
             RepairRunner.CommandRunner run, Func<DshLocation?> resolve,
-            Func<int, PortExclusionStatus>? checkPort = null, Func<int, bool>? fixPort = null)
+            Func<int, PortExclusionStatus>? checkPort = null, Func<int, bool>? fixPort = null,
+            Func<System.Collections.Generic.IReadOnlyList<PluginCompatIssue>>? checkCompat = null)
         {
-            return new RepairRunner(settings, store, pm, cliPath, run, null, resolve, checkPort, fixPort);
+            return new RepairRunner(settings, store, pm, cliPath, run, null, resolve, checkPort, fixPort,
+                checkCompat ?? (() => Array.Empty<PluginCompatIssue>()));
         }
 
         [Fact]
@@ -72,7 +74,7 @@ namespace DshLauncher.Tests
 
             Assert.True(report.AllSucceeded);
             Assert.Equal(
-                new[] { "检查 dsh 安装", "检查端口保留段", "清理卸载残留", "重装依赖", "修复 koffi" },
+                new[] { "检查 dsh 安装", "检查端口保留段", "清理卸载残留", "重装依赖", "检查插件兼容性", "修复 koffi" },
                 report.Steps.Select(s => s.StepName));
 
             Assert.Contains(calls, c => c.script == _dshWin32CliPath && c.args.SequenceEqual(new[] { "fix" }));
@@ -82,6 +84,39 @@ namespace DshLauncher.Tests
             Assert.Equal(@"C:\node.exe", saved.NodePath);
             Assert.Equal(@"C:\dsh\bin.js", saved.DshBinPath);
             Assert.Equal("0.1.1", saved.DshVersion);
+        }
+
+        [Fact]
+        public void CompatIssues_FixedByPluginUpdate_StepPasses()
+        {
+            var calls = new List<(string script, string[] args)>();
+            var compatChecks = 0;
+            var issues = new List<PluginCompatIssue> { new PluginCompatIssue("dshmarket", "@deepseek-ai/dsh-session", "^0.1.5", "0.1.0") };
+            var runner = MakeRunner(_settings, _store, _pluginManager, _dshWin32CliPath,
+                (script, args) => { calls.Add((script, args)); return (0, ""); },
+                () => new DshLocation("node", "bin", "1"),
+                checkPort: _ => PortExclusionStatus.None,
+                checkCompat: () => ++compatChecks == 1 ? issues : Array.Empty<PluginCompatIssue>());
+
+            var report = runner.Run();
+
+            Assert.True(report.Steps.First(s => s.StepName == "检查插件兼容性").Succeeded);
+            Assert.Contains(calls, c => c.args.SequenceEqual(new[] { "plugin", "--profile", "web", "update", "dshmarket" }));
+        }
+
+        [Fact]
+        public void CompatIssues_RemainAfterUpdate_StepFails()
+        {
+            var runner = MakeRunner(_settings, _store, _pluginManager, _dshWin32CliPath,
+                (script, args) => (0, ""),
+                () => new DshLocation("node", "bin", "1"),
+                checkPort: _ => PortExclusionStatus.None,
+                checkCompat: () => new[] { new PluginCompatIssue("dshmarket", "@deepseek-ai/dsh-session", "^0.2.0", "0.1.5-rc.2") });
+
+            var report = runner.Run();
+
+            Assert.False(report.AllSucceeded);
+            Assert.False(report.Steps.First(s => s.StepName == "检查插件兼容性").Succeeded);
         }
 
         [Fact]

@@ -15,6 +15,7 @@ Windows 原生图形界面程序（C# / WPF，.NET 5，零第三方运行时依�
 ## 功能
 
 - **一键启动**：双击桌面快捷方式（`--start`）即拉起 `dsh web` 并打开浏览器。
+- **访问令牌（token）**：新版 harness 每次启动会生成新的访问 token，launcher 自动解析启动输出并在「打开网页」/自动开浏览器时带上（`http://127.0.0.1:3080/?token=…`）；接管已运行的 harness 时也会从日志找回 token。
 - **启动 / 停止 / 重启**：完整控制 harness 进程树。
 - **运行状态与健康检查**：轮询监听端口，实时显示「已停止 / 启动中 / 运行中 / 异常」。
 - **开机自启**：写入 `HKCU\...\Run`（按用户登录自启，无需管理员），支持静默启动与延迟 N 秒。
@@ -26,7 +27,7 @@ Windows 原生图形界面程序（C# / WPF，.NET 5，零第三方运行时依�
 - **日志查看**：实时 tail dsh 输出，日志落在 `%LOCALAPPDATA%\DSHLauncher\logs\dsh.log`。
 - **自动更新 dsh**：检查版本 + 一键 `npm install -g @deepseek-ai/dsh@latest`。
 - **插件管理**：列出已加载插件（标注「内置/插件/残留/未加载」+ 版本）、安装、卸载、重装依赖、扫描并清理卸载残留。
-- **一键自动修复**：一键执行「检查 dsh 安装 → 检查端口保留段（自动修复）→ 清理卸载残留 → 重装依赖 → 修复 koffi 原生模块」，每步结果与输出明细呈现，完成后托盘通知。
+- **一键自动修复**：一键执行「检查 dsh 安装 → 检查端口保留段（自动修复）→ 清理卸载残留 → 重装依赖 → 检查插件兼容性（自动更新不兼容插件）→ 修复 koffi 原生模块」，每步结果与输出明细呈现，完成后托盘通知。
 - **一键备份 / 恢复**：把 `%USERPROFILE%\.dsh` 打包为 zip（排除 node_modules/cache），可从备份恢复（带 zip-slip 防护）。
 - **快捷打开最近会话 / 工作区**：解析 `.dsh\sessions` 下的会话日志（含 zstd 压缩格式），显示「时间 + 会话标题 + 工作区」。
 - **桌面通知**：托盘气泡提示启动/崩溃/备份等事件。
@@ -38,7 +39,7 @@ Windows 原生图形界面程序（C# / WPF，.NET 5，零第三方运行时依�
 
 ```powershell
 dotnet build DshLauncher.sln -c Release
-dotnet test  DshLauncher.sln -c Release      # 56 个单元测试
+dotnet test  DshLauncher.sln -c Release      # 86 个单元测试
 dotnet publish src\DshLauncher\DshLauncher.csproj -c Release -o publish
 ```
 

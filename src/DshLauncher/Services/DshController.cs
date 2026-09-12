@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Timers;
 
 namespace DshLauncher.Services
@@ -56,7 +58,8 @@ namespace DshLauncher.Services
                 if (detection.Status == HarnessPortStatus.HarnessRunning)
                 {
                     _adoptedPid = detection.OwnerPid;
-                    ResolvedUrl = DshCommandBuilder.BuildUrl(_settings.Host, _settings.Port);
+                    // 接管外部已运行的 harness：其启动时打印的带 token 的 URL 只能从日志里找
+                    ResolvedUrl = FindTokenUrl(ReadLogTail()) ?? DshCommandBuilder.BuildUrl(_settings.Host, _settings.Port);
                     ResolvedUrlChanged?.Invoke(ResolvedUrl);
                     Log($"检测到 harness 已在运行（PID {_adoptedPid}），直接接管状态。");
                     SetState(DshState.Running);
@@ -121,7 +124,9 @@ namespace DshLauncher.Services
                 Log("⚠ 端口绑定被拒绝（EACCES）：端口可能落在 Windows 保留端口段（Hyper-V/WSL2 的 winnat 服务动态保留）。请到「维护 → 一键自动修复」执行端口修复。");
             }
 
-            if (_settings.Port == 0)
+            // 新版 harness 启动时打印带 token 的访问 URL（每次启动 token 不同），
+            // 始终解析并更新 ResolvedUrl，供「打开网页」和自动开浏览器使用。
+            if (line.StartsWith("dsh web:", StringComparison.OrdinalIgnoreCase) || _settings.Port == 0)
             {
                 var url = HealthChecker.ParseWebUrl(line);
                 if (url != null && url != ResolvedUrl)
@@ -213,6 +218,37 @@ namespace DshLauncher.Services
                 p.Kill(entireProcessTree: true);
             }
             catch { /* already gone */ }
+        }
+
+        private static IEnumerable<string> ReadLogTail()
+        {
+            try
+            {
+                if (!File.Exists(AppPaths.DshLogPath))
+                {
+                    return Array.Empty<string>();
+                }
+                var lines = File.ReadAllLines(AppPaths.DshLogPath);
+                return lines.Skip(Math.Max(0, lines.Length - 100)).ToList();
+            }
+            catch
+            {
+                return Array.Empty<string>();
+            }
+        }
+
+        /// <summary>Finds the most recent token URL printed by a `dsh web:` startup line.</summary>
+        internal static string? FindTokenUrl(IEnumerable<string> lines)
+        {
+            string? found = null;
+            foreach (var line in lines)
+            {
+                if (line.StartsWith("dsh web:", StringComparison.OrdinalIgnoreCase))
+                {
+                    found = HealthChecker.ParseWebUrl(line) ?? found;
+                }
+            }
+            return found;
         }
 
         private void SetState(DshState state)
