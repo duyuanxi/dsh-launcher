@@ -19,6 +19,34 @@ namespace DshLauncher
 
             var autostart = Array.IndexOf(e.Args, "--autostart") >= 0;
             var startNow = Array.IndexOf(e.Args, "--start") >= 0;
+            var forceInstall = Array.IndexOf(e.Args, "--install") >= 0;
+
+            // First run without any mode flag (e.g. a freshly downloaded setup
+            // exe) opens the one-click installer instead of the launcher.
+            if (forceInstall || (!autostart && !startNow && !InstallerService.IsInstalled()))
+            {
+                var installer = new InstallerWindow();
+                installer.Closed += (_, __) =>
+                {
+                    if (installer.RunPortableRequested)
+                    {
+                        StartLauncher(false, false);
+                    }
+                    else
+                    {
+                        Shutdown();
+                    }
+                };
+                MainWindow = installer;
+                installer.Show();
+                return;
+            }
+
+            StartLauncher(autostart, startNow);
+        }
+
+        private void StartLauncher(bool autostart, bool startNow)
+        {
             var identity = Environment.UserName.Replace('\\', '_');
 
             _mutex = new Mutex(true, "DshLauncher.SingleInstance." + identity, out var createdNew);
@@ -40,6 +68,7 @@ namespace DshLauncher
 
             try
             {
+                SessionHelper.EnsureExtracted();
                 _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "DshLauncher.ShowRequested." + identity);
                 var waitThread = new Thread(() =>
                 {

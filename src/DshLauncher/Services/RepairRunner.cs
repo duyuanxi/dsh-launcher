@@ -47,6 +47,8 @@ namespace DshLauncher.Services
         private readonly CommandRunner _runCommand;
         private readonly Action<string>? _log;
         private readonly Func<DshLocation?> _resolveDsh;
+        private readonly Func<int, PortExclusionStatus> _checkPort;
+        private readonly Func<int, bool> _fixPort;
 
         public RepairRunner(
             AppSettings settings,
@@ -55,7 +57,9 @@ namespace DshLauncher.Services
             string dshWin32CliPath,
             CommandRunner runCommand,
             Action<string>? log = null,
-            Func<DshLocation?>? resolveDsh = null)
+            Func<DshLocation?>? resolveDsh = null,
+            Func<int, PortExclusionStatus>? checkPort = null,
+            Func<int, bool>? fixPort = null)
         {
             _settings = settings;
             _store = store;
@@ -64,6 +68,8 @@ namespace DshLauncher.Services
             _runCommand = runCommand;
             _log = log;
             _resolveDsh = resolveDsh ?? (() => new DshResolver().Resolve());
+            _checkPort = checkPort ?? (port => PortExclusionService.Check(port));
+            _fixPort = fixPort ?? (port => PortExclusionFixer.Run(port));
         }
 
         public RepairReport Run()
@@ -86,7 +92,29 @@ namespace DshLauncher.Services
                 steps.Add(new RepairStepResult("检查 dsh 安装", true, $"dsh {loc.Version}（{loc.NodePath}）"));
             }
 
-            // 2. clean leftover bundle entries
+            // 2. check the port against Windows reserved ranges (winnat EACCES issue)
+            _log?.Invoke("── 检查端口保留段…");
+            var portStatus = _checkPort(_settings.Port);
+            if (portStatus != PortExclusionStatus.SystemReserved)
+            {
+                var portDetail = portStatus == PortExclusionStatus.AdminExcluded
+                    ? $"端口 {_settings.Port} 已从系统保留段排除（此前已修复）"
+                    : $"端口 {_settings.Port} 未被 Windows 保留";
+                steps.Add(new RepairStepResult("检查端口保留段", true, portDetail));
+            }
+            else
+            {
+                _log?.Invoke($"⚠ 端口 {_settings.Port} 落在 Windows 保留端口段内（Hyper-V/WSL2 的 winnat 服务），将尝试修复（会弹出 UAC 管理员授权）…");
+                var fixedOk = _fixPort(_settings.Port);
+                var after = _checkPort(_settings.Port);
+                var ok = fixedOk && after != PortExclusionStatus.SystemReserved;
+                steps.Add(new RepairStepResult(
+                    "检查端口保留段",
+                    ok,
+                    ok ? $"已把端口 {_settings.Port} 永久移出 winnat 动态保留段（重启后仍有效）" : "修复失败（UAC 被取消或 winnat 操作失败），端口可能仍无法绑定"));
+            }
+
+            // 3. clean leftover bundle entries
             _log?.Invoke("── 扫描卸载残留…");
             var leftovers = _pluginManager.ScanLeftovers();
             if (leftovers.Count == 0)

@@ -53,9 +53,10 @@ namespace DshLauncher.Tests
 
         private static RepairRunner MakeRunner(
             AppSettings settings, SettingsStore store, PluginManager pm, string cliPath,
-            RepairRunner.CommandRunner run, Func<DshLocation?> resolve)
+            RepairRunner.CommandRunner run, Func<DshLocation?> resolve,
+            Func<int, PortExclusionStatus>? checkPort = null, Func<int, bool>? fixPort = null)
         {
-            return new RepairRunner(settings, store, pm, cliPath, run, null, resolve);
+            return new RepairRunner(settings, store, pm, cliPath, run, null, resolve, checkPort, fixPort);
         }
 
         [Fact]
@@ -64,13 +65,14 @@ namespace DshLauncher.Tests
             var calls = new List<(string script, string[] args)>();
             var runner = MakeRunner(_settings, _store, _pluginManager, _dshWin32CliPath,
                 (script, args) => { calls.Add((script, args)); return (0, ""); },
-                () => new DshLocation(@"C:\node.exe", @"C:\dsh\bin.js", "0.1.1"));
+                () => new DshLocation(@"C:\node.exe", @"C:\dsh\bin.js", "0.1.1"),
+                checkPort: _ => PortExclusionStatus.None);
 
             var report = runner.Run();
 
             Assert.True(report.AllSucceeded);
             Assert.Equal(
-                new[] { "检查 dsh 安装", "清理卸载残留", "重装依赖", "修复 koffi" },
+                new[] { "检查 dsh 安装", "检查端口保留段", "清理卸载残留", "重装依赖", "修复 koffi" },
                 report.Steps.Select(s => s.StepName));
 
             Assert.Contains(calls, c => c.script == _dshWin32CliPath && c.args.SequenceEqual(new[] { "fix" }));
@@ -80,6 +82,52 @@ namespace DshLauncher.Tests
             Assert.Equal(@"C:\node.exe", saved.NodePath);
             Assert.Equal(@"C:\dsh\bin.js", saved.DshBinPath);
             Assert.Equal("0.1.1", saved.DshVersion);
+        }
+
+        [Fact]
+        public void PortReserved_FixSucceeds_StepPasses()
+        {
+            var fixCalls = new List<int>();
+            var runner = MakeRunner(_settings, _store, _pluginManager, _dshWin32CliPath,
+                (script, args) => (0, ""),
+                () => new DshLocation("node", "bin", "1"),
+                checkPort: p => fixCalls.Count == 0 ? PortExclusionStatus.SystemReserved : PortExclusionStatus.AdminExcluded,
+                fixPort: p => { fixCalls.Add(p); return true; });
+
+            var report = runner.Run();
+
+            Assert.True(report.AllSucceeded);
+            Assert.Contains(fixCalls, p => p == 3080);
+            Assert.True(report.Steps.First(s => s.StepName == "检查端口保留段").Succeeded);
+        }
+
+        [Fact]
+        public void PortReserved_FixFails_StepFails()
+        {
+            var runner = MakeRunner(_settings, _store, _pluginManager, _dshWin32CliPath,
+                (script, args) => (0, ""),
+                () => new DshLocation("node", "bin", "1"),
+                checkPort: _ => PortExclusionStatus.SystemReserved,
+                fixPort: _ => false);
+
+            var report = runner.Run();
+
+            Assert.False(report.AllSucceeded);
+            Assert.False(report.Steps.First(s => s.StepName == "检查端口保留段").Succeeded);
+        }
+
+        [Fact]
+        public void PortAdminExcluded_NoFixNeeded()
+        {
+            var runner = MakeRunner(_settings, _store, _pluginManager, _dshWin32CliPath,
+                (script, args) => (0, ""),
+                () => new DshLocation("node", "bin", "1"),
+                checkPort: _ => PortExclusionStatus.AdminExcluded,
+                fixPort: _ => throw new InvalidOperationException("fix must not be called"));
+
+            var report = runner.Run();
+
+            Assert.True(report.Steps.First(s => s.StepName == "检查端口保留段").Succeeded);
         }
 
         [Fact]

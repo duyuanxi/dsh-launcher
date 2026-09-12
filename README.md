@@ -4,12 +4,13 @@ Windows 原生图形界面程序（C# / WPF，.NET 5，零第三方运行时依�
 
 ## 下载
 
-最新发布（预构建 zip）见 [Releases](https://github.com/duyuanxi/dsh-launcher/releases)：
+最新发布见 [Releases](https://github.com/duyuanxi/dsh-launcher/releases)：
 
-- `DshLauncher-vX.Y.Z-win-x64.zip`：解压后把内容放到 `%LOCALAPPDATA%\DSHLauncher\`，双击 `DshLauncher.exe` 即可（需已装 .NET 5 运行时）。
-- `DshLauncher-vX.Y.Z-win-x64-selfcontained.zip`：自包含单文件版，免装 .NET。
+- **`DshLauncher-Setup-vX.Y.Z.exe`（推荐）**：一键安装器。下载后双击，自动进入安装向导——安装全局 dsh → 复制到 `%LOCALAPPDATA%\DSHLauncher` → 桌面快捷方式 →（可选）开机自启，装完一键启动。自包含，免装 .NET。
+- `DshLauncher-vX.Y.Z-win-x64.zip`：框架依赖版（体积小，需已装 .NET 5 运行时）。解压到 `%LOCALAPPDATA%\DSHLauncher\` 即可。
+- `DshLauncher-vX.Y.Z-win-x64-selfcontained.zip`：自包含单文件版，免装 .NET，适合便携使用。
 
-前置依赖：Windows 10/11、Node.js ≥ 22.15（会话识别用到内置 zstd）、全局安装 `@deepseek-ai/dsh`（`npm install -g @deepseek-ai/dsh`）。
+前置依赖：Windows 10/11、Node.js ≥ 22.15（会话识别用到内置 zstd；安装器会检测并引导安装）、`@deepseek-ai/dsh`（安装器/部署脚本会自动安装）。
 
 ## 功能
 
@@ -20,10 +21,12 @@ Windows 原生图形界面程序（C# / WPF，.NET 5，零第三方运行时依�
 - **守护模式**：harness 崩溃后指数退避自动重启（3s → 60s 封顶）。
 - **最小化到系统托盘**：关窗/最小化退到托盘，托盘菜单可快速控制。
 - **端口 / 主机可配置**：图形界面改监听端口与绑定地址（`0.0.0.0` 因 dsh 安全限制被禁止）。
+- **端口保留段检测与修复**：自动检测端口是否落入 Windows 保留段（Hyper-V/WSL2 的 winnat 动态保留，bind 报 EACCES），安装器与一键修复均可一键永久修复（需管理员授权一次）。
+- **退出不关 harness**：关闭/退出 launcher 后 harness 继续运行（输出重定向到日志文件，独立存活）；停止 harness 用「停止」按钮。
 - **日志查看**：实时 tail dsh 输出，日志落在 `%LOCALAPPDATA%\DSHLauncher\logs\dsh.log`。
 - **自动更新 dsh**：检查版本 + 一键 `npm install -g @deepseek-ai/dsh@latest`。
 - **插件管理**：列出已加载插件（标注「内置/插件/残留/未加载」+ 版本）、安装、卸载、重装依赖、扫描并清理卸载残留。
-- **一键自动修复**：一键执行「检查 dsh 安装 → 清理卸载残留 → 重装依赖 → 修复 koffi 原生模块」，每步结果与输出明细呈现，完成后托盘通知。
+- **一键自动修复**：一键执行「检查 dsh 安装 → 检查端口保留段（自动修复）→ 清理卸载残留 → 重装依赖 → 修复 koffi 原生模块」，每步结果与输出明细呈现，完成后托盘通知。
 - **一键备份 / 恢复**：把 `%USERPROFILE%\.dsh` 打包为 zip（排除 node_modules/cache），可从备份恢复（带 zip-slip 防护）。
 - **快捷打开最近会话 / 工作区**：解析 `.dsh\sessions` 下的会话日志（含 zstd 压缩格式），显示「时间 + 会话标题 + 工作区」。
 - **桌面通知**：托盘气泡提示启动/崩溃/备份等事件。
@@ -35,7 +38,7 @@ Windows 原生图形界面程序（C# / WPF，.NET 5，零第三方运行时依�
 
 ```powershell
 dotnet build DshLauncher.sln -c Release
-dotnet test  DshLauncher.sln -c Release      # 41 个单元测试
+dotnet test  DshLauncher.sln -c Release      # 56 个单元测试
 dotnet publish src\DshLauncher\DshLauncher.csproj -c Release -o publish
 ```
 
@@ -90,5 +93,5 @@ src/DshLauncher.Tests/        # xUnit 单元测试
 
 - 配置文件：`%LOCALAPPDATA%\DSHLauncher\config.json`。
 - 数据 / 日志 / 备份目录：`%LOCALAPPDATA%\DSHLauncher\`（logs / backups）。
-- 程序以「生命周期所有者」身份管理 harness：托盘「退出」会同时停止 harness。
+- 退出 launcher 后 harness 继续运行（输出重定向到日志文件，独立存活）。
 - 通知暂用托盘气泡（零依赖），可后续升级为原生 Windows Toast。

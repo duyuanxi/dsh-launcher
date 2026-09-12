@@ -54,6 +54,9 @@ namespace DshLauncher.Services
             return FindOnPath("node.exe");
         }
 
+        /// <summary>Locates node.exe on this machine, or null when Node.js is missing.</summary>
+        public static string? FindNodePath() => FindNode();
+
         private static string? FindDshBin()
         {
             var root = GetNpmGlobalRoot();

@@ -9,7 +9,7 @@
     <RootNamespace>DshLauncher</RootNamespace>
     <Nullable>enable</Nullable>
     <LangVersion>9.0</LangVersion>
-    <Version>1.0.0</Version>
+    <Version>1.2.0</Version>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 
@@ -17,6 +17,7 @@
     <Content Include="session-reader.mjs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <EmbeddedResource Include="session-reader.mjs" />
   </ItemGroup>
 
 </Project>

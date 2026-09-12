@@ -116,6 +116,11 @@ namespace DshLauncher.Services
         {
             Log(line);
 
+            if (line.Contains("EACCES", StringComparison.OrdinalIgnoreCase))
+            {
+                Log("⚠ 端口绑定被拒绝（EACCES）：端口可能落在 Windows 保留端口段（Hyper-V/WSL2 的 winnat 服务动态保留）。请到「维护 → 一键自动修复」执行端口修复。");
+            }
+
             if (_settings.Port == 0)
             {
                 var url = HealthChecker.ParseWebUrl(line);

@@ -13,6 +13,8 @@ publish-*/
 
 # Release artifacts
 *.zip
+DshLauncher-Setup-*.exe
+release-notes.md
 
 # Local working notes (not part of the published repo)
 findings.md

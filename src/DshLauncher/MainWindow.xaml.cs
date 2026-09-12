@@ -97,7 +97,7 @@ namespace DshLauncher
             menu.Items.Add(watchdogItem);
 
             menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-            menu.Items.Add("退出", null, (_, __) => ExitApplication());
+            menu.Items.Add("退出（保持 harness 运行）", null, (_, __) => ExitApplication());
 
             var icon = new System.Windows.Forms.NotifyIcon
             {
@@ -812,19 +812,9 @@ namespace DshLauncher
 
         private void ExitApplication()
         {
-            if (_controller.State == DshState.Running || _controller.State == DshState.Starting)
-            {
-                var r = MessageBox.Show(
-                    "DeepSeek Harness 正在运行，退出启动器时会同时停止它。确定退出？",
-                    "退出", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (r != MessageBoxResult.Yes)
-                {
-                    return;
-                }
-            }
-
+            // 退出 launcher 后 harness 继续运行（其输出重定向到日志文件，独立存活）；
+            // 如需停止 harness，请用「停止」按钮或托盘菜单。
             _allowClose = true;
-            _controller.Dispose();
             _trayIcon.Dispose();
             Application.Current.Shutdown();
         }
@@ -860,11 +850,11 @@ namespace DshLauncher
             try
             {
                 return Process.GetCurrentProcess().MainModule?.FileName
-                    ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+                    ?? Path.Combine(AppContext.BaseDirectory, "DshLauncher.exe");
             }
             catch
             {
-                return System.Reflection.Assembly.GetExecutingAssembly().Location;
+                return Path.Combine(AppContext.BaseDirectory, "DshLauncher.exe");
             }
         }
 
